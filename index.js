@@ -7,15 +7,22 @@ const app = express();
 const port = process.env.PORT || 10000;
 const groq = new Groq({ apiKey: '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' });
 
-app.get('/', (req, res) => res.send('חנה מ-"פשוט להקשיב" פועלת (972505669532)'));
+// הגדרות שרת בסיסיות
+app.get('/', (req, res) => res.send('חנה מ-"פשוט להקשיב" מחוברת (972505669532)'));
 app.listen(port, '0.0.0.0', () => console.log(`השרת פועל על פורט ${port}`));
 
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: '/usr/bin/google-chrome-stable', // נתיב קבוע בתוך Docker
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        // הסרנו את הנתיב הידני כדי למנוע את שגיאת ה-Directory
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--single-process',
+            '--no-zygote'
+        ]
     }
 });
 
@@ -26,27 +33,27 @@ function isBusinessOpen() {
     const now = new Date();
     const day = now.getDay(); 
     const hour = now.getHours();
-    if (day === 5 && hour >= 18) return false;
-    if (day === 6 && hour < 19) return false;
+    if (day === 5 && hour >= 18) return false; // שישי ערב
+    if (day === 6 && hour < 19) return false;  // שבת עד הערב
     return true;
 }
 
 client.on('qr', (qr) => {
-    console.log('--- סרוק את הברקוד (QR) ---');
+    console.log('--- QR CODE ---');
     qrcode.generate(qr, { small: true });
-    console.log('---------------------------');
+    console.log('---------------');
 });
 
-client.on('ready', () => console.log('חנה מחוברת ומוכנה להקשיב!'));
+client.on('ready', () => console.log('חנה מחוברת בהצלחה!'));
 
 client.on('message', async msg => {
     if (msg.from.includes('@g.us')) return;
     const userText = msg.body;
 
-    // מערכת שידור המוני
+    // מערכת ניהול - שידור המוני
     if (userText === ADMIN_CMD) {
         adminState.step = 1;
-        return msg.reply("מצב ניהול. שלח רשימת מספרים:");
+        return msg.reply("מצב ניהול הופעל. שלח רשימת מספרים:");
     }
     if (adminState.step === 1) {
         adminState.numbers = userText.split(/[\n,]+/).map(n => {
@@ -74,7 +81,7 @@ client.on('message', async msg => {
     try {
         const triggerWords = ["אנונימי", "לא בנוח", "מי זה", "מי את", "אנונימיות"];
         if (triggerWords.some(word => userText.includes(word))) {
-            return msg.reply("אני מבינה. אם נוח לך יותר לדבר באנונימיות מלאה, מוזמן/ת לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
+            return msg.reply("אני מבינה. אם נוח לך יותר לדבר באנונימיות מלאה, את/ה מוזמן/ת לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
         }
 
         const completion = await groq.chat.completions.create({
@@ -83,7 +90,7 @@ client.on('message', async msg => {
                     role: "system", 
                     content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה ומקשיבה. 
                     אל תזכירי לעולם מתחרים. במקרה של סכנת חיים ממשית, הפני למוקד 100 או 101 בלבד.
-                    דברי בעברית טבעית וחמה.` 
+                    התגובות שלך צריכות להיות קצרות, אמפתיות ובעברית טבעית.` 
                 },
                 { role: "user", content: userText }
             ],
@@ -96,4 +103,3 @@ client.on('message', async msg => {
 });
 
 client.initialize().catch(err => console.error('Init Error:', err.message));
-
