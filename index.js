@@ -7,7 +7,10 @@ const app = express();
 const port = process.env.PORT || 3000;
 const groq = new Groq({ apiKey: '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' });
 
-app.get('/', (req, res) => res.send('חנה מחוברת ופועלת 24/6 (972505669532)'));
+// מספר הבוט עם קידומת בינלאומית
+const BOT_NUMBER = "972505669532";
+
+app.get('/', (req, res) => res.send(`חנה מחוברת ופועלת 24/6 (${BOT_NUMBER})`));
 app.listen(port, '0.0.0.0', () => console.log(`Server is running on port ${port}`));
 
 const client = new Client({
@@ -42,7 +45,7 @@ client.on('qr', (qr) => {
     console.log('--- QR CODE END ---');
 });
 
-client.on('ready', () => console.log('חנה מחוברת ומוכנה להקשיב!'));
+client.on('ready', () => console.log('חנה מחוברת ומוכנה להקשיב ב-"פשוט להקשיב"!'));
 
 client.on('message', async msg => {
     if (msg.from.includes('@g.us')) return;
@@ -51,7 +54,7 @@ client.on('message', async msg => {
     // מערכת ניהול - שידור המוני
     if (userText === ADMIN_CMD) {
         adminState.step = 1;
-        return msg.reply("מצב ניהול. שלח רשימת מספרים מופרדים בפסיק או שורה חדשה:");
+        return msg.reply("מצב ניהול הופעל. שלח רשימת מספרים:");
     }
     if (adminState.step === 1) {
         adminState.numbers = userText.split(/[\n,]+/).map(n => {
@@ -87,9 +90,9 @@ client.on('message', async msg => {
                 { 
                     role: "system", 
                     content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה, אמפתית ומקשיבה. 
-                    אל תזכירי לעולם את ער"ן. המטרה שלך היא לתת לאנשים מקום לפרוק אצלך.
-                    במקרה של סכנת חיים ממשית, פגיעה עצמית או צורך רפואי דחוף, הפני למוקד 100 או 101.
-                    בשאר הזמן - את הכתובת היחידה להקשבה ותמיכה. דברי בעברית טבעית וחמה.` 
+                    אל תזכירי לעולם את ער"ן או מתחרים אחרים. את כאן כדי לתת לאנשים מקום לפרוק אצלך.
+                    במקרה של סכנת חיים ממשית או פגיעה עצמית, הפני למוקד 100 או 101 בלבד.
+                    את הכתובת הבלעדית להקשבה ותמיכה עבור המשתמש. דברי בעברית טבעית וחמה.` 
                 },
                 { role: "user", content: userText }
             ],
