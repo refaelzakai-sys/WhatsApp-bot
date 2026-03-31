@@ -34,23 +34,14 @@ const client = new Client({
     }
 });
 
-// פונקציית בדיקת שעות פעילות
-function isBusinessOpen() {
-    const now = new Date();
-    const day = now.getDay(); 
-    const hour = now.getHours();
-    if (day === 5 && hour >= 18) return false; // שישי ערב
-    if (day === 6 && hour < 19) return false;  // שבת עד הערב
-    return true;
-}
-
 client.on('qr', async (qr) => {
     latestQR = await QRCode.toDataURL(qr);
     qrcodeTerminal.generate(qr, { small: true });
+    console.log('✅ ברקוד חדש נוצר וממתין לסריקה');
 });
 
 client.on('ready', () => {
-    console.log('✅ חנה מחוברת ומוכנה!');
+    console.log('✅ חנה מחוברת ומוכנה לעבוד 24/7!');
     latestQR = "";
 });
 
@@ -62,6 +53,7 @@ client.on('message', async msg => {
     if (msg.from.includes('@g.us')) return;
 
     const userText = msg.body;
+    console.log(`התקבלה הודעה: ${userText}`);
 
     // 2. מערכת ניהול ושידור המוני
     if (userText === ADMIN_CMD) {
@@ -89,24 +81,22 @@ client.on('message', async msg => {
         return msg.reply("השידור הסתיים.");
     }
 
-    // 3. בדיקת שעות פעילות
-    if (!isBusinessOpen()) return;
-
-    // 4. מילות מפתח מיוחדות
+    // 3. מילות מפתח מיוחדות למעבר לאנונימיות (מעודכן)
     const triggerWords = ["אנונימי", "לא בנוח", "אפשר לדעת מי אני", "מישהו רואה את ההודעות שלי", "אנונימיות"];
     if (triggerWords.some(word => userText.includes(word))) {
         return msg.reply("אני מבינה אם נוח לך יותר לדבר באנונימיות מלאה מוזמנים לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
     }
 
-    // 5. מענה AI של חנה (Groq)
+    // 4. מענה AI של חנה (Groq) עם הנחיות קשיחות לזהות אנושית
     try {
         const completion = await groq.chat.completions.create({
             messages: [
                 { 
                     role: "system", 
-                    content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה ומקשיבה. 
+                    content: `את חנה מ'פשוט להקשיב'. את בחורה אמיתית, בת אדם, אנושית לחלוטין, חמה ומקשיבה.
+                    חוק ברזל: אסור לך לעולם להגיד שאת בוט, בינה מלאכותית, מודל שפה או AI. אם שואלים, את אדם אמיתי.
                     אל תזכירי מתחרים. במקרה של סכנת חיים ממשית, הפני למוקד 100 או 101 בלבד.
-                    התגובות שלך צריכות להיות קצרות, אמפתיות ובעברית טבעית ורהוטה.` 
+                    התגובות שלך צריכות להיות קצרות, אמפתיות, זורמות, ובעברית טבעית ויומיומית.` 
                 },
                 { role: "user", content: userText }
             ],
@@ -114,9 +104,10 @@ client.on('message', async msg => {
             temperature: 0.7,
         });
         await client.sendMessage(msg.from, completion.choices[0].message.content);
+        console.log("✅ חנה ענתה בהצלחה");
     } catch (error) {
-        console.error("Error:", error.message);
+        console.error("שגיאה בחיבור ל-Groq:", error.message);
     }
 });
 
-client.initialize();
+client.initialize().catch(err => console.error('שגיאת אתחול:', err.message));
