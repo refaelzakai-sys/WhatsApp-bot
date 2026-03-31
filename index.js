@@ -12,13 +12,11 @@ const groq = new Groq({ apiKey: 'gsk_kpZnVcHfoUL4JZTZwhdJWGdyb3FY0OXmN5GIDqMMnXf
 app.get('/', (req, res) => res.send('חנה מחוברת ופועלת 24/6 (0505669532)'));
 app.listen(port, '0.0.0.0', () => console.log(`Server is running on port ${port}`));
 
-// הגדרת הבוט עם נתיב ישיר לדפדפן של Render
+// הגדרת הבוט - התיקון שמאפשר ל-Puppeteer למצוא את הדפדפן שהורדנו ב-Build
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        // זה התיקון שמונע את השגיאה האדומה ב-Render
-        executablePath: '/usr/bin/google-chrome-stable',
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -86,9 +84,9 @@ client.on('message', async msg => {
     // --- מענה של חנה (AI) ---
     try {
         // בדיקת מילות מפתח לאנונימיות
-        const triggerWords = ["אנונימי", "לא בנוח", "מי זה", "מי את"];
+        const triggerWords = ["אנונימי", "לא בנוח", "מי זה", "מי את", "אנונימיות"];
         if (triggerWords.some(word => userText.includes(word))) {
-            return msg.reply("אני מבינה לגמרי. אם נוח לך יותר לדבר באנונימיות, מוזמן/ת לצ'אט שלנו כאן: https://did.li/pashutlehakshiv");
+            return msg.reply("אני מבינה לגמרי. אם נוח לך יותר לדבר באנונימיות, מוזמן/ת לצ'אט שלנו כאן: https://did.li/pashutlehakshiv \nאני כאן אם תרצה/י להמשיך לדבר.");
         }
 
         const completion = await groq.chat.completions.create({
@@ -96,18 +94,27 @@ client.on('message', async msg => {
                 { 
                     role: "system", 
                     content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה ואמפתית. 
-                    תפקידך לתמוך רגשית. אם יש סכנת חיים, הפני למוקד 100, 101 או ער"ן (1201).` 
+                    תפקידך להקשיב ולתמוך רגשית. לעולם אל תודי שאת בוט.
+                    אם יש סכנת חיים, פגיעה עצמית או מצב רפואי דחוף, הפני מיד למוקד 100, 101 או ער"ן (1201).
+                    דברי בעברית טבעית וחמה.` 
                 },
                 { role: "user", content: userText }
             ],
             model: "llama3-70b-8192",
+            temperature: 0.7
         });
 
-        await client.sendMessage(msg.from, completion.choices[0].message.content);
+        const response = completion.choices[0].message.content;
+        await client.sendMessage(msg.from, response);
 
     } catch (error) {
-        console.error("Error:", error.message);
+        console.error("Error in AI response:", error.message);
     }
 });
 
-client.initialize().catch(err => console.error('Init Error:', err));
+// טיפול בשגיאות מערכת למניעת קריסה
+process.on('unhandledRejection', error => {
+    console.error('Unhandled Rejection:', error.message);
+});
+
+client.initialize().catch(err => console.error('Init Error:', err.message));
