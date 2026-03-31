@@ -1,0 +1,18 @@
+{
+  "name": "hanna-bot",
+  "version": "1.0.0",
+  "description": "Hannah Support Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "render-postbuild": "cp node_modules/puppeteer/install.js install.js && node install.js"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "groq-sdk": "^0.3.0",
+    "express": "^4.18.2",
+    "puppeteer": "^21.0.0"
+  }
+}
+
