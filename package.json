@@ -1,16 +1,17 @@
 {
-  "name": "hanna-bot",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
+  "description": "WhatsApp Bot with AI",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node index.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "latest",
-    "qrcode-terminal": "latest",
-    "groq-sdk": "latest",
-    "express": "latest",
-    "puppeteer": "latest"
+    "express": "^4.18.2",
+    "whatsapp-web.js": "^1.23.0",
+    "qrcode-terminal": "^0.12.0",
+    "qrcode": "^1.5.3",
+    "groq-sdk": "^0.3.3",
+    "puppeteer": "^21.0.0"
   }
 }
