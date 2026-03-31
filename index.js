@@ -4,26 +4,18 @@ const Groq = require('groq-sdk');
 const express = require('express');
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 10000;
 const groq = new Groq({ apiKey: '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' });
 
-// מספר הבוט עם קידומת בינלאומית
-const BOT_NUMBER = "972505669532";
-
-app.get('/', (req, res) => res.send(`חנה מחוברת ופועלת 24/6 (${BOT_NUMBER})`));
-app.listen(port, '0.0.0.0', () => console.log(`Server is running on port ${port}`));
+app.get('/', (req, res) => res.send('חנה מ-"פשוט להקשיב" פועלת (972505669532)'));
+app.listen(port, '0.0.0.0', () => console.log(`השרת פועל על פורט ${port}`));
 
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
+        executablePath: '/usr/bin/google-chrome-stable', // נתיב קבוע בתוך Docker
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--single-process',
-            '--no-zygote'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
 
@@ -40,21 +32,21 @@ function isBusinessOpen() {
 }
 
 client.on('qr', (qr) => {
-    console.log('--- QR CODE START ---');
+    console.log('--- סרוק את הברקוד (QR) ---');
     qrcode.generate(qr, { small: true });
-    console.log('--- QR CODE END ---');
+    console.log('---------------------------');
 });
 
-client.on('ready', () => console.log('חנה מחוברת ומוכנה להקשיב ב-"פשוט להקשיב"!'));
+client.on('ready', () => console.log('חנה מחוברת ומוכנה להקשיב!'));
 
 client.on('message', async msg => {
     if (msg.from.includes('@g.us')) return;
     const userText = msg.body;
 
-    // מערכת ניהול - שידור המוני
+    // מערכת שידור המוני
     if (userText === ADMIN_CMD) {
         adminState.step = 1;
-        return msg.reply("מצב ניהול הופעל. שלח רשימת מספרים:");
+        return msg.reply("מצב ניהול. שלח רשימת מספרים:");
     }
     if (adminState.step === 1) {
         adminState.numbers = userText.split(/[\n,]+/).map(n => {
@@ -70,11 +62,11 @@ client.on('message', async msg => {
         for (let num of adminState.numbers) {
             try { 
                 await client.sendMessage(`${num}@c.us`, adminState.text);
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(r => setTimeout(r, 1000));
             } catch(e) {}
         }
         adminState.step = 0;
-        return msg.reply("השידור הסתיים בהצלחה.");
+        return msg.reply("השידור הסתיים.");
     }
 
     if (!isBusinessOpen()) return;
@@ -82,22 +74,20 @@ client.on('message', async msg => {
     try {
         const triggerWords = ["אנונימי", "לא בנוח", "מי זה", "מי את", "אנונימיות"];
         if (triggerWords.some(word => userText.includes(word))) {
-            return msg.reply("אני מבינה לגמרי. אם נוח לך יותר לדבר באנונימיות מלאה, את/ה מוזמן/ת לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv \nאני כאן אם תרצה/י להמשיך לדבר.");
+            return msg.reply("אני מבינה. אם נוח לך יותר לדבר באנונימיות מלאה, מוזמן/ת לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
         }
 
         const completion = await groq.chat.completions.create({
             messages: [
                 { 
                     role: "system", 
-                    content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה, אמפתית ומקשיבה. 
-                    אל תזכירי לעולם את ער"ן או מתחרים אחרים. את כאן כדי לתת לאנשים מקום לפרוק אצלך.
-                    במקרה של סכנת חיים ממשית או פגיעה עצמית, הפני למוקד 100 או 101 בלבד.
-                    את הכתובת הבלעדית להקשבה ותמיכה עבור המשתמש. דברי בעברית טבעית וחמה.` 
+                    content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה ומקשיבה. 
+                    אל תזכירי לעולם מתחרים. במקרה של סכנת חיים ממשית, הפני למוקד 100 או 101 בלבד.
+                    דברי בעברית טבעית וחמה.` 
                 },
                 { role: "user", content: userText }
             ],
             model: "llama3-70b-8192",
-            temperature: 0.7
         });
         await client.sendMessage(msg.from, completion.choices[0].message.content);
     } catch (error) {
@@ -105,5 +95,5 @@ client.on('message', async msg => {
     }
 });
 
-process.on('unhandledRejection', error => console.error('Error:', error.message));
 client.initialize().catch(err => console.error('Init Error:', err.message));
+
