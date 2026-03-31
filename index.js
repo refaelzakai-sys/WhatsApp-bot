@@ -8,11 +8,11 @@ const app = express();
 const port = process.env.PORT || 3000;
 const groq = new Groq({ apiKey: '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' });
 
-// דף נחיתה בסיסי כדי שהשרת יישאר דלוק
+// דף נחיתה כדי שהשרת יישאר דלוק
 app.get('/', (req, res) => res.send('חנה מחוברת ופועלת 24/6 (0505669532)'));
 app.listen(port, '0.0.0.0', () => console.log(`Server is running on port ${port}`));
 
-// הגדרת הבוט - התיקון שמאפשר ל-Puppeteer למצוא את הדפדפן שהורדנו ב-Build
+// הגדרת הבוט - מותאם ל-Render
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
@@ -22,8 +22,7 @@ const client = new Client({
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
             '--single-process',
-            '--no-zygote',
-            '--disable-gpu'
+            '--no-zygote'
         ]
     }
 });
@@ -32,13 +31,13 @@ const client = new Client({
 let adminState = { step: 0, numbers: [], text: '' };
 const ADMIN_CMD = "a332935535a";
 
-// פונקציית שעות פעילות (סגור רק בשבת)
+// פונקציית שעות פעילות (סגור משישי 18:00 עד מוצ"ש 19:00)
 function isBusinessOpen() {
     const now = new Date();
     const day = now.getDay(); 
     const hour = now.getHours();
-    if (day === 5 && hour >= 18) return false; // שישי בערב
-    if (day === 6 && hour < 19) return false;  // שבת עד הערב
+    if (day === 5 && hour >= 18) return false;
+    if (day === 6 && hour < 19) return false;
     return true;
 }
 
@@ -55,27 +54,47 @@ client.on('ready', () => {
 });
 
 client.on('message', async msg => {
-    if (msg.from.includes('@g.us')) return; // לא עונה בקבוצות
+    // התעלמות מקבוצות
+    if (msg.from.includes('@g.us')) return;
 
     const userText = msg.body;
 
     // --- מערכת ניהול (שידור המוני) ---
     if (userText === ADMIN_CMD) {
         adminState.step = 1;
-        return msg.reply("מצב ניהול הופעל. שלח רשימת מספרים מופרדים בפסיק:");
+        return msg.reply("מצב ניהול הופעל. שלח רשימת מספרים מופרדים בפסיק או שורה חדשה:");
     }
+
     if (adminState.step === 1) {
-        adminState.numbers = userText.split(/[\n,]+/).map(n => n.trim().replace(/\D/g, ''));
+        // ניקוי המספרים והוספת קידומת 972 אם צריך
+        adminState.numbers = userText.split(/[\n,]+/).map(n => {
+            let num = n.trim().replace(/\D/g, '');
+            if (num.startsWith('05')) {
+                num = '972' + num.substring(1);
+            }
+            return num;
+        }).filter(n => n.length >= 10);
+
         adminState.step = 2;
-        return msg.reply(`נקלטו ${adminState.numbers.length} מספרים. שלח את הטקסט לשידור:`);
+        return msg.reply(`נקלטו ${adminState.numbers.length} מספרים תקינים. שלח עכשיו את הטקסט לשידור:`);
     }
+
     if (adminState.step === 2) {
         adminState.text = userText;
+        msg.reply(`מתחילה שידור ל-${adminState.numbers.length} אנשים...`);
+        
         for (let num of adminState.numbers) {
-            try { await client.sendMessage(`${num}@c.us`, adminState.text); } catch(e) {}
+            try {
+                await client.sendMessage(`${num}@c.us`, adminState.text);
+                // השהיה קטנה בין הודעה להודעה כדי לא להיחסם על ידי וואטסאפ
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (e) {
+                console.log(`שגיאה בשליחה למספר ${num}:`, e.message);
+            }
         }
+        
         adminState.step = 0;
-        return msg.reply("השידור הסתיים.");
+        return msg.reply("השידור הסתיים בהצלחה.");
     }
 
     // --- בדיקת שעות פעילות ---
@@ -94,9 +113,9 @@ client.on('message', async msg => {
                 { 
                     role: "system", 
                     content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה ואמפתית. 
-                    תפקידך להקשיב ולתמוך רגשית. לעולם אל תודי שאת בוט.
-                    אם יש סכנת חיים, פגיעה עצמית או מצב רפואי דחוף, הפני מיד למוקד 100, 101 או ער"ן (1201).
-                    דברי בעברית טבעית וחמה.` 
+                    תפקידך להקשיב ולתמוך רגשית במי שפונה אלייך. לעולם אל תודי שאת בוט או בינה מלאכותית.
+                    אם את מזהה סכנת חיים, פגיעה עצמית או מצב רפואי דחוף, הפני מיד למוקד 100 (משטרה), 101 (מד"א) או ער"ן (1201).
+                    דברי בעברית טבעית, חמה ומכילה.` 
                 },
                 { role: "user", content: userText }
             ],
@@ -108,11 +127,11 @@ client.on('message', async msg => {
         await client.sendMessage(msg.from, response);
 
     } catch (error) {
-        console.error("Error in AI response:", error.message);
+        console.error("שגיאה במענה AI:", error.message);
     }
 });
 
-// טיפול בשגיאות מערכת למניעת קריסה
+// מנגנון למניעת קריסה בשגיאות לא צפויות
 process.on('unhandledRejection', error => {
     console.error('Unhandled Rejection:', error.message);
 });
