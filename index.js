@@ -10,75 +10,64 @@ const groq = new Groq({ apiKey: 'gsk_kpZnVcHfoUL4JZTZwhdJWGdyb3FY0OXmN5GIDqMMnXf
 
 let latestQR = "";
 
-// יצירת דף אינטרנט שיציג את הברקוד לסריקה נוחה
+// דף הברקוד לסריקה
 app.get('/', (req, res) => {
     if (latestQR) {
-        res.send(`
-            <html>
-                <body style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; background-color:#f0f2f5;">
-                    <div style="background:white; padding:40px; border-radius:20px; box-shadow:0 4px 15px rgba(0,0,0,0.1); text-align:center;">
-                        <h1 style="color:#128c7e;">חברו את חנה לוואטסאפ</h1>
-                        <p>סרקו את הברקוד דרך מכשירים מקושרים באפליקציה</p>
-                        <img src="${latestQR}" style="width:300px; margin:20px 0;">
-                        <p style="font-size:12px; color:#666;">הדף מתרענן אוטומטית כל 30 שניות</p>
-                    </div>
-                    <script>setTimeout(() => location.reload(), 30000);</script>
-                </body>
-            </html>
-        `);
+        res.send(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background-color:#f0f2f5;">
+            <div style="background:white;padding:40px;border-radius:20px;box-shadow:0 4px 15px rgba(0,0,0,0.1);text-align:center;">
+                <h1 style="color:#128c7e;">חברו את חנה לוואטסאפ</h1>
+                <img src="${latestQR}" style="width:300px;margin:20px 0;">
+                <p>סרקו ממכשירים מקושרים</p>
+            </div><script>setTimeout(()=>location.reload(),30000);</script></body></html>`);
     } else {
-        res.send(`
-            <html>
-                <body style="display:flex; align-items:center; justify-content:center; height:100vh; font-family:sans-serif;">
-                    <h1 style="color:#128c7e;">חנה מחוברת או שהברקוד בטעינה...</h1>
-                </body>
-            </html>
-        `);
+        res.send('<h1>חנה מחוברת או בטעינה...</h1>');
     }
 });
 
-app.listen(port, '0.0.0.0', () => console.log(`Server running on port ${port}`));
+app.listen(port, '0.0.0.0');
 
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--single-process',
-            '--no-zygote'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process', '--no-zygote']
     }
 });
 
+// פונקציית בדיקת שעות פעילות
+function isBusinessOpen() {
+    const now = new Date();
+    const day = now.getDay(); 
+    const hour = now.getHours();
+    if (day === 5 && hour >= 18) return false; // שישי ערב
+    if (day === 6 && hour < 19) return false;  // שבת עד הערב
+    return true;
+}
+
 client.on('qr', async (qr) => {
-    console.log('--- קוד QR חדש הופק ---');
-    qrcodeTerminal.generate(qr, { small: true });
-    // הפיכת הקוד לתמונה שאפשר להציג באתר
     latestQR = await QRCode.toDataURL(qr);
+    qrcodeTerminal.generate(qr, { small: true });
 });
 
 client.on('ready', () => {
-    console.log('חנה מחוברת ומוכנה לעבודה!');
-    latestQR = ""; 
+    console.log('✅ חנה מחוברת ומוכנה!');
+    latestQR = "";
 });
 
-// לוגיקה של הבוט
 let adminState = { step: 0, numbers: [], text: '' };
 const ADMIN_CMD = "a332935535a";
 
 client.on('message', async msg => {
+    // 1. הגנה: חנה לא עונה בקבוצות לעולם
     if (msg.from.includes('@g.us')) return;
+
     const userText = msg.body;
 
-    // פקודת מנהל לשידור המוני
+    // 2. מערכת ניהול ושידור המוני
     if (userText === ADMIN_CMD) {
         adminState.step = 1;
-        return msg.reply("מצב ניהול: שלח רשימת מספרים (מופרדים בפסיק או שורה חדשה):");
+        return msg.reply("מצב ניהול פעיל. שלח רשימת מספרים (מופרדים בפסיק או שורה):");
     }
-    
     if (adminState.step === 1) {
         adminState.numbers = userText.split(/[\n,]+/).map(n => {
             let num = n.trim().replace(/\D/g, '');
@@ -86,9 +75,8 @@ client.on('message', async msg => {
             return num;
         }).filter(n => n.length >= 10);
         adminState.step = 2;
-        return msg.reply(`זוהו ${adminState.numbers.length} מספרים. שלח כעת את הודעת השידור:`);
+        return msg.reply(`נקלטו ${adminState.numbers.length} מספרים. שלח טקסט לשידור:`);
     }
-
     if (adminState.step === 2) {
         adminState.text = userText;
         for (let num of adminState.numbers) {
@@ -98,30 +86,37 @@ client.on('message', async msg => {
             } catch(e) {}
         }
         adminState.step = 0;
-        return msg.reply("השידור ההמוני הושלם בהצלחה.");
+        return msg.reply("השידור הסתיים.");
     }
 
-    // מענה רגיל על ידי חנה (AI)
-    try {
-        const triggerWords = ["אנונימי", "לא בנוח", "מי זה", "מי את", "אנונימיות"];
-        if (triggerWords.some(word => userText.includes(word))) {
-            return msg.reply("אני מבינה. אם נוח לך יותר לדבר באנונימיות מלאה, מוזמן/ת לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
-        }
+    // 3. בדיקת שעות פעילות
+    if (!isBusinessOpen()) return;
 
+    // 4. מילות מפתח מיוחדות
+    const triggerWords = ["אנונימי", "לא בנוח", "אפשר לדעת מי אני", "מישהו רואה את ההודעות שלי", "אנונימיות"];
+    if (triggerWords.some(word => userText.includes(word))) {
+        return msg.reply("אני מבינה אם נוח לך יותר לדבר באנונימיות מלאה מוזמנים לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
+    }
+
+    // 5. מענה AI של חנה (Groq)
+    try {
         const completion = await groq.chat.completions.create({
             messages: [
                 { 
                     role: "system", 
-                    content: "את חנה מ'פשוט להקשיב'. דמות אנושית, חמה ומקשיבה. אל תזכירי מתחרים. במקרה של סכנת חיים ממשית, הפני למוקד 100 או 101 בלבד. עני קצר ולעניין." 
+                    content: `את חנה מ'פשוט להקשיב'. את דמות אנושית, חמה ומקשיבה. 
+                    אל תזכירי מתחרים. במקרה של סכנת חיים ממשית, הפני למוקד 100 או 101 בלבד.
+                    התגובות שלך צריכות להיות קצרות, אמפתיות ובעברית טבעית ורהוטה.` 
                 },
                 { role: "user", content: userText }
             ],
             model: "llama3-70b-8192",
+            temperature: 0.7,
         });
         await client.sendMessage(msg.from, completion.choices[0].message.content);
     } catch (error) {
-        console.error("AI Error:", error.message);
+        console.error("Error:", error.message);
     }
 });
 
-client.initialize().catch(err => console.error('Init Error:', err.message));
+client.initialize();
