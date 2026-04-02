@@ -10,7 +10,7 @@ const groq = new Groq({ apiKey: 'gsk_kpZnVcHfoUL4JZTZwhdJWGdyb3FY0OXmN5GIDqMMnXf
 
 let latestQR = "";
 
-// דף הברקוד לסריקה
+// דף הברקוד לסריקה - מתרענן כל 5 דקות
 app.get('/', (req, res) => {
     if (latestQR) {
         res.send(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background-color:#f0f2f5;">
@@ -18,7 +18,10 @@ app.get('/', (req, res) => {
                 <h1 style="color:#128c7e;">חברו את חנה לוואטסאפ</h1>
                 <img src="${latestQR}" style="width:300px;margin:20px 0;">
                 <p>סרקו ממכשירים מקושרים</p>
-            </div><script>setTimeout(()=>location.reload(),30000);</script></body></html>`);
+                <p style="color:gray; font-size:12px;">הדף יתרענן אוטומטית רק בעוד 5 דקות</p>
+            </div>
+            <script>setTimeout(()=>location.reload(), 300000);</script>
+            </body></html>`);
     } else {
         res.send('<h1>חנה מחוברת או בטעינה...</h1>');
     }
@@ -37,11 +40,11 @@ const client = new Client({
 client.on('qr', async (qr) => {
     latestQR = await QRCode.toDataURL(qr);
     qrcodeTerminal.generate(qr, { small: true });
-    console.log('✅ ברקוד חדש נוצר וממתין לסריקה');
+    console.log('✅ ברקוד חדש ממתין לסריקה (זמן רענון דף הוארך ל-5 דקות)');
 });
 
 client.on('ready', () => {
-    console.log('✅ חנה מחוברת ומוכנה לעבוד 24/7!');
+    console.log('✅ חנה מחוברת ומוכנה לפעולה 24/7!');
     latestQR = "";
 });
 
@@ -49,7 +52,7 @@ let adminState = { step: 0, numbers: [], text: '' };
 const ADMIN_CMD = "a332935535a";
 
 client.on('message', async msg => {
-    // 1. הגנה: חנה לא עונה בקבוצות לעולם
+    // 1. חסימה מוחלטת של קבוצות
     if (msg.from.includes('@g.us')) return;
 
     const userText = msg.body;
@@ -81,13 +84,13 @@ client.on('message', async msg => {
         return msg.reply("השידור הסתיים.");
     }
 
-    // 3. מילות מפתח מיוחדות למעבר לאנונימיות (מעודכן)
+    // 3. מילות מפתח מיוחדות לאנונימיות
     const triggerWords = ["אנונימי", "לא בנוח", "אפשר לדעת מי אני", "מישהו רואה את ההודעות שלי", "אנונימיות"];
     if (triggerWords.some(word => userText.includes(word))) {
         return msg.reply("אני מבינה אם נוח לך יותר לדבר באנונימיות מלאה מוזמנים לצ'אט האנונימי באתר שלנו: https://did.li/pashutlehakshiv");
     }
 
-    // 4. מענה AI של חנה (Groq) עם הנחיות קשיחות לזהות אנושית
+    // 4. מענה AI של חנה - אנושית לחלוטין
     try {
         const completion = await groq.chat.completions.create({
             messages: [
