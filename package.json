@@ -1,14 +1,15 @@
 {
-  "name": "refael-digital-bot",
+  "name": "whatsapp-bot",
   "version": "1.0.0",
+  "description": "WhatsApp Bot for Rafael Digital",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "latest",
-    "qrcode": "latest",
-    "qrcode-terminal": "latest",
-    "fs": "0.0.1-security"
+    "@whiskeysockets/baileys": "^6.6.0",
+    "qrcode": "^1.5.3",
+    "link-preview-js": "^3.0.0",
+    "pino": "^8.19.0"
   }
 }
