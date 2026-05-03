@@ -1,4 +1,4 @@
-const { default: makeWASocket, useMultiFileAuthState, disconnectReason } = require("@whiskeysockets/baileys");
+const { default: makeWASocket, useMultiFileAuthState, disconnectReason, makeCacheableSignalKeyStore } = require("@whiskeysockets/baileys");
 const fs = require("fs");
 const http = require("http");
 const QRCode = require('qrcode');
@@ -11,21 +11,21 @@ const OWNER_NUMBER = "0583293459@s.whatsapp.net";
 const CONTACTS_FILE = "./contacts.json";
 const SAVE_KEYWORDS = ['שמור', 'שמירה', 'תשמור', 'לשמור', 'save'];
 
-// שרת אינטרנט להצגת הברקוד בצורה יציבה
+// שרת אינטרנט להצגת הברקוד
 http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (qrCodeData) {
         try {
             const qrImage = await QRCode.toDataURL(qrCodeData);
             res.end(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#000;color:#fff;font-family:sans-serif;margin:0;">
-                <h2 style="color:#25D366;">Rafael Digital - סרוק לחיבור</h2>
+                <h2 style="color:#25D366;">Rafael Digital - לסרוק עכשיו</h2>
                 <div style="background:#fff;padding:20px;border-radius:15px;"><img src="${qrImage}" style="width:300px;"></div>
-                <p style="margin-top:20px;">רענן את הדף אם הברקוד לא נסרק</p>
-                <script>setTimeout(()=>location.reload(),15000);</script></body></html>`);
-        } catch (e) { res.end("Generating QR Code..."); }
+                <p>רענן אם לא נסרק תוך דקה</p>
+                <script>setTimeout(()=>location.reload(),20000);</script></body></html>`);
+        } catch (e) { res.end("טוען ברקוד..."); }
     } else {
         res.end(`<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;background:#000;color:#fff;font-family:sans-serif;margin:0;">
-            <h1>${sock?.user ? "✅ הבוט מחובר ועובד!" : "🔄 המערכת מתחוללת... רענן בעוד 10 שניות"}</h1>
+            <h1>${sock?.user ? "✅ הבוט מחובר!" : "🔄 המערכת בהרצה... רענן בעוד כמה שניות"}</h1>
             <script>setTimeout(()=>location.reload(),5000);</script></body></html>`);
     }
 }).listen(PORT, '0.0.0.0');
@@ -34,14 +34,17 @@ async function startBot() {
     if (!fs.existsSync('./auth_info')) fs.mkdirSync('./auth_info', { recursive: true });
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     
-    // הגדרות למניעת שגיאת ה-Noise Handler שראינו בלוגים
     sock = makeWASocket({
-        auth: state,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+        },
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
         browser: ["Rafael Digital", "Chrome", "1.0.0"],
-        syncFullHistory: false,
-        markOnlineOnConnect: true
+        // הגדרות קריטיות למניעת שגיאת ה-Noise Handler
+        version: [2, 3000, 1015901307],
+        generateHighQualityLinkPreview: true
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -53,18 +56,15 @@ async function startBot() {
         if (connection === 'close') {
             qrCodeData = "";
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            // אם הניתוק הוא לא בגלל שיצאת מהחשבון - תנסה להתחבר שוב
             if (statusCode !== disconnectReason.loggedOut) {
-                console.log("מתחבר מחדש...");
                 setTimeout(startBot, 5000);
             } else {
-                console.log("בוצע ניתוק מהמכשיר. מוחק נתונים...");
                 fs.rmSync('./auth_info', { recursive: true, force: true });
                 startBot();
             }
         } else if (connection === 'open') {
             qrCodeData = "";
-            console.log('✅ הבוט באוויר!');
+            console.log('✅ Connected!');
         }
     });
 
@@ -80,37 +80,24 @@ async function startBot() {
 
             let savedContacts = fs.existsSync(CONTACTS_FILE) ? JSON.parse(fs.readFileSync(CONTACTS_FILE)) : [];
 
-            // 1. הודעת פתיחה ושליחת vCard אליך (רק בפעם הראשונה)
+            // 1. הודעת פתיחה ושליחת vCard אליך
             if (!savedContacts.includes(senderId)) {
                 await sock.sendMessage(senderId, { text: "ברוכים הבאים לסטטוס - אפ במה אפשר לעזור?" });
                 
-                // יצירת vCard
                 const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${senderName}\nTEL;TYPE=CELL:${cleanNum}\nEND:VCARD`;
-                
-                // שליחה למספר שלך
-                await sock.sendMessage(OWNER_NUMBER, { 
-                    contacts: { 
-                        displayName: senderName, 
-                        contacts: [{ vcard }] 
-                    } 
-                });
+                await sock.sendMessage(OWNER_NUMBER, { contacts: { displayName: senderName, contacts: [{ vcard }] } });
 
                 savedContacts.push(senderId);
                 fs.writeFileSync(CONTACTS_FILE, JSON.stringify(savedContacts));
             }
 
-            // 2. תגובה למילות מפתח של שמירה
+            // 2. מילות מפתח לשמירה
             if (SAVE_KEYWORDS.some(kw => text.includes(kw))) {
                 await sock.sendMessage(senderId, { text: "נשמרת בהצלחה אל תשכח לשמור אותנו 😉" });
             }
-        } catch (e) {
-            console.error("שגיאה בעיבוד הודעה:", e);
-        }
+        } catch (e) {}
     });
 }
 
-// יצירת קובץ אנשי קשר אם לא קיים
 if (!fs.existsSync(CONTACTS_FILE)) fs.writeFileSync(CONTACTS_FILE, JSON.stringify([]));
-
-// הפעלה
 startBot();
