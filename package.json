@@ -1,7 +1,7 @@
 {
   "name": "refael-digital-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Bot",
+  "description": "WhatsApp Bot for Rafael Digital",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,5 +10,8 @@
     "@whiskeysockets/baileys": "^6.7.0",
     "qrcode": "^1.5.3",
     "pino": "^8.19.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
