@@ -1,106 +1,102 @@
 const { default: makeWASocket, useMultiFileAuthState, delay, disconnectReason } = require("@whiskeysockets/baileys");
-const qrcode = require("qrcode-terminal");
 const fs = require("fs");
 const http = require("http");
+const QRCode = require('qrcode');
 
-// --- הגדרות שרת עבור Render (Health Check) ---
-// Render דורש שהאפליקציה תקשיב לפורט מסוים, אחרת הוא יבצע Restart
-const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("Bot is alive and running!");
-}).listen(PORT, () => {
-  console.log(`Server is listening on port ${PORT}`);
-});
+let qrCodeData = ""; // כאן יישמר ה-QR האחרון שנוצר
+
+// --- שרת אינטרנט להצגת ה-QR באתר ---
+const server = http.createServer(async (req, res) => {
+    if (qrCodeData) {
+        // אם יש QR, נהפוך אותו לתמונה ונציג בדף
+        const qrImage = await QRCode.toDataURL(qrCodeData);
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`
+            <html>
+                <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;">
+                    <h1>סרוק את ה-QR לחיבור הבוט</h1>
+                    <img src="${qrImage}" style="width:300px;border:10px solid white;box-shadow:0 0 15px rgba(0,0,0,0.2);">
+                    <p>הדף מתרענן אוטומטית כל 30 שניות</p>
+                    <script>setTimeout(() => { location.reload(); }, 30000);</script>
+                </body>
+            </html>
+        `);
+    } else {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end("<h1>הבוט מחובר או שעדיין לא נוצר קוד QR. בדוק שוב בעוד רגע.</h1>");
+    }
+}).listen(process.env.PORT || 3000);
 
 // --- הגדרות הבוט ---
-const OWNER_NUMBER = "0583293459@s.whatsapp.net"; // המספר שלך לקבלת התראות
+const OWNER_NUMBER = "0583293459@s.whatsapp.net";
 const CONTACTS_FILE = "./contacts.json";
 const SAVE_KEYWORDS = ['שמור', 'שמירה', 'תשמור', 'לשמור', 'save'];
 
-// פונקציה ליצירת כרטיס ביקור (VCF)
-function createVCF(phoneNumber) {
-    const cleanNumber = phoneNumber.split('@')[0];
-    return `BEGIN:VCARD\nVERSION:3.0\nFN:ליד חדש - ${cleanNumber}\nTEL;TYPE=CELL:${cleanNumber}\nEND:VCARD`;
-}
-
 async function startBot() {
-    // ניהול התחברות (Session)
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
-    
     const sock = makeWASocket({
         auth: state,
-        printQRInTerminal: true, // ה-QR יופיע ב-Logs של Render
+        printQRInTerminal: false, // לא מדפיסים ללוגים כבקשתך
         browser: ["Refael Digital Bot", "Chrome", "1.0.0"]
+    });
+
+    // ניהול ה-QR
+    sock.ev.on('connection.update', (update) => {
+        const { connection, lastDisconnect, qr } = update;
+        
+        if (qr) {
+            qrCodeData = qr; // שמירת הקוד להצגה באתר
+        }
+
+        if (connection === 'close') {
+            qrCodeData = "";
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== disconnectReason.loggedOut;
+            if (shouldReconnect) startBot();
+        } else if (connection === 'open') {
+            qrCodeData = ""; // מנקים את ה-QR ברגע שמתחברים
+            console.log('✅ הבוט מחובר!');
+        }
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    // טעינת רשימת אנשי קשר מהקובץ
+    // לוגיקת הודעות (כמו קודם)
     let savedContacts = [];
     if (fs.existsSync(CONTACTS_FILE)) {
-        try {
-            savedContacts = JSON.parse(fs.readFileSync(CONTACTS_FILE));
-        } catch (e) {
-            savedContacts = [];
-        }
+        try { savedContacts = JSON.parse(fs.readFileSync(CONTACTS_FILE)); } catch (e) {}
     }
 
-    // האזנה להודעות נכנסות
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
         const senderId = msg.key.remoteJid;
-        // חילוץ הטקסט מהודעה רגילה או הודעה עם לינק
         const text = (msg.message.conversation || msg.message.extendedTextMessage?.text || "").toLowerCase().trim();
         
-        let isNewUser = !savedContacts.includes(senderId);
-        let responseText = "";
-
-        // 1. טיפול במשתמש חדש (פעם ראשונה בלבד)
-        if (isNewUser) {
-            responseText += "ברוכים הבאים לסטטוס - אפ במה במה אפשר לעזור?\n\n";
+        if (!savedContacts.includes(senderId)) {
+            await sock.sendMessage(senderId, { text: "ברוכים הבאים לסטטוס - אפ במה במה אפשר לעזור?" });
             savedContacts.push(senderId);
-            // עדכון הקובץ כדי שהבוט יזכור את המשתמש
             fs.writeFileSync(CONTACTS_FILE, JSON.stringify(savedContacts));
         }
 
-        // 2. בדיקת מילות מפתח לשמירה (תמיד פעיל)
-        const needsSaving = SAVE_KEYWORDS.some(kw => text.includes(kw));
-        
-        if (needsSaving) {
-            responseText += "נשמרת בהצלחה אל תשכח לשמור אותנו 😉";
-            
-            // יצירת כרטיס ביקור ושליחה אליך (לבעלים)
-            const vcard = createVCF(senderId);
-            await sock.sendMessage(OWNER_NUMBER, { 
-                contacts: {
-                    displayName: `ליד חדש - ${senderId.split('@')[0]}`,
-                    contacts: [{ vcard }]
-                }
-            });
-        }
-
-        // 3. שליחת התגובה למשתמש
-        if (responseText) {
-            await delay(1500); // השהיה קלה למראה אנושי
-            await sock.sendMessage(senderId, { text: responseText });
-        }
-    });
-
-    // ניהול חיבור מחדש במקרה של ניתוק
-    sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
-        if (connection === 'close') {
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== disconnectReason.loggedOut;
-            console.log('Connection closed. Reconnecting...', shouldReconnect);
-            if (shouldReconnect) startBot();
-        } else if (connection === 'open') {
-            console.log('✅ הבוט מחובר ומוכן לעבודה ב-Render!');
+        if (SAVE_KEYWORDS.some(kw => text.includes(kw))) {
+            await sock.sendMessage(senderId, { text: "נשמרת בהצלחה אל תשכח לשמור אותנו 😉" });
+            const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:ליד - ${senderId.split('@')[0]}\nTEL;TYPE=CELL:${senderId.split('@')[0]}\nEND:VCARD`;
+            await sock.sendMessage(OWNER_NUMBER, { contacts: { displayName: "ליד חדש", contacts: [{ vcard }] } });
         }
     });
 }
 
-// הרצת הבוט
-startBot().catch(err => console.log("שגיאה קריטית:", err));
+// מנגנון איפוס כל 5 דקות במידה ולא מחובר
+setInterval(() => {
+    if (qrCodeData) {
+        console.log("מבצע איפוס יזום לקוד ה-QR...");
+        qrCodeData = "";
+        // ניקוי תיקיית ה-Auth אם נתקע
+        if (fs.existsSync('./auth_info')) {
+            // כאן אפשר להוסיף לוגיקה למחיקת הקבצים אם תרצה איפוס עמוק יותר
+        }
+    }
+}, 5 * 60 * 1000);
+
+startBot();
