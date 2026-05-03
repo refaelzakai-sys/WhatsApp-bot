@@ -11,18 +11,17 @@ const OWNER_NUMBER = "0583293459@s.whatsapp.net";
 const CONTACTS_FILE = "./contacts.json";
 const SAVE_KEYWORDS = ['שמור', 'שמירה', 'תשמור', 'לשמור', 'save'];
 
-// שרת להצגת הברקוד (יהיה זמין בקישור של Render)
+// שרת תצוגה משופר - מונע את ה"משבצות האפורות"
 http.createServer(async (req, res) => {
-    try {
-        if (qrCodeData) {
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    if (qrCodeData) {
+        try {
             const qrImage = await QRCode.toDataURL(qrCodeData);
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f0f2f5;font-family:sans-serif;"><div style="background:white;padding:30px;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,0.1);text-align:center;"><h2 style="color:#128c7e;">Rafael Digital</h2><img src="${qrImage}" style="width:300px;"><p>סרוק לחיבור הבוט - הברקוד מתרענן אוטומטית</p></div><script>setTimeout(()=>location.reload(),15000);</script></body></html>`);
-        } else {
-            res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-            res.end("<body style='display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'><h1>הבוט מחובר! ✅</h1></body>");
-        }
-    } catch (e) { res.end("Loading..."); }
+            res.end(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f0f2f5;font-family:sans-serif;margin:0;"><div style="background:white;padding:40px;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,0.1);text-align:center;"><h2>Rafael Digital</h2><img src="${qrImage}" style="width:300px;border:1px solid #ddd;"><p>סרוק כעת לחיבור הבוט</p></div><script>setTimeout(()=>location.reload(),10000);</script></body></html>`);
+        } catch (e) { res.end("Generating QR..."); }
+    } else {
+        res.end(`<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;margin:0;"><h1>${sock?.user ? "הבוט מחובר! ✅" : "טוען... המתן 15 שניות"}</h1><script>setTimeout(()=>location.reload(),5000);</script></body></html>`);
+    }
 }).listen(PORT, '0.0.0.0');
 
 async function startBot() {
@@ -45,10 +44,11 @@ async function startBot() {
         if (connection === 'close') {
             qrCodeData = "";
             const statusCode = lastDisconnect?.error?.output?.statusCode || 0;
+            // מונע את הקריסה בשורה 62/63 שראינו בלוגים
             if (statusCode !== disconnectReason.loggedOut) {
                 setTimeout(startBot, 5000);
             } else {
-                fs.rmSync('./auth_info', { recursive: true, force: true });
+                try { fs.rmSync('./auth_info', { recursive: true, force: true }); } catch (e) {}
                 startBot();
             }
         } else if (connection === 'open') {
@@ -83,4 +83,6 @@ async function startBot() {
         } catch (e) {}
     });
 }
+
+if (!fs.existsSync(CONTACTS_FILE)) fs.writeFileSync(CONTACTS_FILE, JSON.stringify([]));
 startBot();
