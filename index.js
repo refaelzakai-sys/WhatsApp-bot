@@ -6,30 +6,19 @@ const pino = require('pino');
 
 let qrCodeData = "";
 let sock;
-let qrRefreshTimer;
+let refreshTimer;
 
 const PORT = process.env.PORT || 3000;
 const OWNER_NUMBER = "0583293459@s.whatsapp.net";
 const CONTACTS_FILE = "./contacts.json";
-const SAVE_KEYWORDS = ['שמור', 'שמירה', 'תשמור', 'לשמור', 'save'];
+const SAVE_KEYWORDS = ['שמור', 'שמירה', 'תשמור', 'לשמור'];
 
-// שרת תצוגה
+// שרת אינטרנט להצגת ה-QR
 const server = http.createServer(async (req, res) => {
     if (qrCodeData) {
         const qrImage = await QRCode.toDataURL(qrCodeData);
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`
-            <html>
-            <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f0f2f5;font-family:sans-serif;">
-                <div style="background:white;padding:30px;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,0.1);text-align:center;">
-                    <h2 style="color:#128c7e;">Rafael Digital - חיבור בוט</h2>
-                    <img src="${qrImage}" style="width:300px;border:5px solid #eee;">
-                    <p style="color:#666;">הברקוד יתאפס אוטומטית כל 5 דקות אם לא ייסרק.</p>
-                </div>
-                <script>setTimeout(() => { location.reload(); }, 15000);</script>
-            </body>
-            </html>
-        `);
+        res.end(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f0f2f5;font-family:sans-serif;"><div style="background:white;padding:30px;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,0.1);text-align:center;"><h2 style="color:#128c7e;">Rafael Digital - חיבור בוט</h2><img src="${qrImage}" style="width:300px;"><p>הברקוד מתרענן אוטומטית כל 5 דקות</p></div><script>setTimeout(() => { location.reload(); }, 15000);</script></body></html>`);
     } else {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end("<body style='display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;'><h1>הבוט מחובר! ✅</h1></body>");
@@ -37,8 +26,8 @@ const server = http.createServer(async (req, res) => {
 }).listen(PORT);
 
 async function startBot() {
-    // ניקוי טיימר קודם אם קיים
-    clearTimeout(qrRefreshTimer);
+    // ניקוי טיימר קיים
+    if (refreshTimer) clearTimeout(refreshTimer);
 
     const { state, saveCreds } = await useMultiFileAuthState('auth_info');
     
@@ -56,10 +45,10 @@ async function startBot() {
         
         if (qr) {
             qrCodeData = qr;
-            // הגדרת רענון ל-5 דקות בדיוק
-            qrRefreshTimer = setTimeout(() => {
+            // מנגנון רענון: אם לא התחברנו תוך 5 דקות, מתחילים מחדש
+            refreshTimer = setTimeout(() => {
                 if (!sock.user) {
-                    console.log("QR Expired. Refreshing...");
+                    console.log("QR timed out. Refreshing...");
                     qrCodeData = "";
                     sock.end();
                     if (fs.existsSync('./auth_info')) fs.rmSync('./auth_info', { recursive: true, force: true });
@@ -74,8 +63,8 @@ async function startBot() {
             if (shouldReconnect) startBot();
         } else if (connection === 'open') {
             qrCodeData = "";
-            clearTimeout(qrRefreshTimer);
-            console.log('Bot is Live!');
+            if (refreshTimer) clearTimeout(refreshTimer);
+            console.log('✅ Connected!');
         }
     });
 
@@ -103,7 +92,6 @@ async function startBot() {
     });
 }
 
-// יצירת קובץ אנשי קשר אם חסר
 if (!fs.existsSync(CONTACTS_FILE)) fs.writeFileSync(CONTACTS_FILE, JSON.stringify([]));
 
 startBot();
