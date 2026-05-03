@@ -11,16 +11,16 @@ const OWNER_NUMBER = "0583293459@s.whatsapp.net";
 const CONTACTS_FILE = "./contacts.json";
 const SAVE_KEYWORDS = ['שמור', 'שמירה', 'תשמור', 'לשמור', 'save'];
 
-// שרת אינטרנט להצגת הברקוד
+// שרת שיציג את הברקוד באתר במקום משבצות
 http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     if (qrCodeData) {
         try {
             const qrImage = await QRCode.toDataURL(qrCodeData);
-            res.end(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#f0f2f5;font-family:sans-serif;margin:0;"><div style="background:white;padding:40px;border-radius:20px;box-shadow:0 10px 25px rgba(0,0,0,0.1);text-align:center;"><h2>Rafael Digital</h2><img src="${qrImage}" style="width:300px;"><p>סרוק כעת לחיבור הבוט</p></div><script>setTimeout(()=>location.reload(),10000);</script></body></html>`);
-        } catch (e) { res.end("Generating QR..."); }
+            res.end(`<html><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#000;color:#fff;font-family:sans-serif;margin:0;"><h2>Rafael Digital - סריקה</h2><img src="${qrImage}" style="width:300px;border:10px solid white;border-radius:10px;"><p>סרוק עכשיו כדי לחבר את הבוט</p><script>setTimeout(()=>location.reload(),10000);</script></body></html>`);
+        } catch (e) { res.end("מייצר ברקוד..."); }
     } else {
-        res.end(`<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;margin:0;"><h1>${sock?.user ? "הבוט מחובר! ✅" : "מכין את הברקוד... המתן כמה שניות"}</h1><script>setTimeout(()=>location.reload(),5000);</script></body></html>`);
+        res.end(`<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;background:#000;color:#fff;font-family:sans-serif;margin:0;"><h1>${sock?.user ? "✅ הבוט מחובר!" : "מכין את הברקוד... רענן בעוד כמה שניות"}</h1><script>setTimeout(()=>location.reload(),5000);</script></body></html>`);
     }
 }).listen(PORT, '0.0.0.0');
 
@@ -43,16 +43,16 @@ async function startBot() {
         
         if (connection === 'close') {
             qrCodeData = "";
-            const statusCode = lastDisconnect?.error?.output?.statusCode || 0;
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
             if (statusCode !== disconnectReason.loggedOut) {
                 setTimeout(startBot, 5000);
             } else {
-                try { fs.rmSync('./auth_info', { recursive: true, force: true }); } catch (e) {}
+                fs.rmSync('./auth_info', { recursive: true, force: true });
                 startBot();
             }
         } else if (connection === 'open') {
             qrCodeData = "";
-            console.log('✅ Connected');
+            console.log('Bot is online!');
         }
     });
 
@@ -68,11 +68,10 @@ async function startBot() {
 
             let savedContacts = fs.existsSync(CONTACTS_FILE) ? JSON.parse(fs.readFileSync(CONTACTS_FILE)) : [];
 
-            // 1. הודעת פתיחה ושליחת המספר אליך (רק בפעם הראשונה)
+            // 1. הודעת פתיחה ושליחת איש קשר אליך
             if (!savedContacts.includes(senderId)) {
                 await sock.sendMessage(senderId, { text: "ברוכים הבאים לסטטוס - אפ במה אפשר לעזור?" });
                 
-                // שליחת vCard למספר שלך
                 const vcard = `BEGIN:VCARD\nVERSION:3.0\nFN:${senderName}\nTEL;TYPE=CELL:${cleanNum}\nEND:VCARD`;
                 await sock.sendMessage(OWNER_NUMBER, { contacts: { displayName: senderName, contacts: [{ vcard }] } });
                 
@@ -80,7 +79,7 @@ async function startBot() {
                 fs.writeFileSync(CONTACTS_FILE, JSON.stringify(savedContacts));
             }
 
-            // 2. הודעת שמירה אם המשתמש כתב מילת מפתח
+            // 2. הודעת שמירה
             if (SAVE_KEYWORDS.some(kw => text.includes(kw))) {
                 await sock.sendMessage(senderId, { text: "נשמרת בהצלחה אל תשכח לשמור אותנו 😉" });
             }
